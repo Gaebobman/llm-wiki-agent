@@ -13,6 +13,11 @@ class Settings:
     qmd_config: Path
     telegram_bot_token: str | None
     telegram_allowed_user_ids: set[int]
+    qmd_mode: str = "auto"
+    qmd_binary: str = "qmd"
+    qmd_timeout_seconds: int = 30
+    qmd_refresh_command: str | None = None
+    qmd_search_command: str | None = None
     scan_interval_seconds: int = 300
     ingest_interval_seconds: int = 60
 
@@ -62,6 +67,11 @@ def load_settings() -> Settings:
         qmd_config=qmd_config,
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN") or None,
         telegram_allowed_user_ids=allowed,
+        qmd_mode=os.getenv("QMD_MODE", "auto"),
+        qmd_binary=os.getenv("QMD_BINARY", "qmd"),
+        qmd_timeout_seconds=int(os.getenv("QMD_TIMEOUT_SECONDS", "30")),
+        qmd_refresh_command=os.getenv("QMD_REFRESH_COMMAND") or None,
+        qmd_search_command=os.getenv("QMD_SEARCH_COMMAND") or None,
         scan_interval_seconds=int(os.getenv("SCAN_INTERVAL_SECONDS", "300")),
         ingest_interval_seconds=int(os.getenv("INGEST_INTERVAL_SECONDS", "60")),
     )

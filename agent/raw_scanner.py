@@ -35,8 +35,41 @@ class ScanResult:
     missing_raw_dir: bool = False
 
 
+@dataclass(frozen=True)
+class QueueFileResult:
+    queued: bool
+    skipped: bool
+    job_id: str | None
+    sha256: str
+    path: str
+
+
 def should_ignore(path: Path) -> bool:
     return any(fnmatch.fnmatch(part, pattern) for part in path.parts for pattern in IGNORE_PATTERNS)
+
+
+def queue_raw_file(settings: Settings, path: Path, source: str) -> QueueFileResult:
+    sha256 = sha256_file(path)
+    rel_path = relative_to_root(path, settings.wiki_root)
+    if has_manifest_hash(settings.manifest_path, sha256) or has_queue_hash(settings.queue_path, sha256):
+        return QueueFileResult(
+            queued=False,
+            skipped=True,
+            job_id=None,
+            sha256=sha256,
+            path=rel_path,
+        )
+
+    job_id = f"ingest_{now_iso().replace('-', '').replace(':', '').replace('+', '_')}_{sha256[:8]}"
+    append_manifest_queued(settings.manifest_path, sha256, rel_path, source)
+    append_queue_job(settings.queue_path, job_id, sha256, rel_path, source)
+    return QueueFileResult(
+        queued=True,
+        skipped=False,
+        job_id=job_id,
+        sha256=sha256,
+        path=rel_path,
+    )
 
 
 def scan_raw_sources(settings: Settings, source: str = "drive_raw_scan") -> ScanResult:
@@ -56,16 +89,12 @@ def scan_raw_sources(settings: Settings, source: str = "drive_raw_scan") -> Scan
             continue
 
         scanned += 1
-        sha256 = sha256_file(path)
-        rel_path = relative_to_root(path, settings.wiki_root)
-        if has_manifest_hash(settings.manifest_path, sha256) or has_queue_hash(settings.queue_path, sha256):
+        result = queue_raw_file(settings, path, source)
+        if result.skipped:
             skipped += 1
             continue
-
-        job_id = f"ingest_{now_iso().replace('-', '').replace(':', '').replace('+', '_')}_{sha256[:8]}"
-        append_manifest_queued(settings.manifest_path, sha256, rel_path, source)
-        append_queue_job(settings.queue_path, job_id, sha256, rel_path, source)
-        queued += 1
+        if result.queued:
+            queued += 1
 
     return ScanResult(scanned=scanned, queued=queued, skipped=skipped)
 

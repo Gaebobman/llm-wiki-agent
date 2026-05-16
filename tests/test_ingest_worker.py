@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import zipfile
+
 from agent.config import Settings
 from agent.ingest_worker import process_pending
 from agent.jsonl_store import read_jsonl
@@ -39,3 +41,30 @@ def test_ingest_creates_source_note_index_and_log(tmp_path):
     )
     assert read_jsonl(settings.queue_path)[0]["status"] == "done"
     assert read_jsonl(settings.manifest_path)[0]["status"] == "ingested"
+
+
+def test_ingest_extracts_docx_text(tmp_path):
+    settings = make_settings(tmp_path)
+    settings.raw_sources_dir.mkdir(parents=True)
+    docx_path = settings.raw_sources_dir / "Policy.docx"
+    with zipfile.ZipFile(docx_path, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            """
+            <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+              <w:body>
+                <w:p><w:r><w:t>Approval policy</w:t></w:r></w:p>
+                <w:p><w:r><w:t>Contract review</w:t></w:r></w:p>
+              </w:body>
+            </w:document>
+            """,
+        )
+    scan_raw_sources(settings)
+
+    result = process_pending(settings, limit=None)
+
+    assert result.processed == 1
+    source_note = settings.wiki_sources_dir / "policy.md"
+    note_text = source_note.read_text(encoding="utf-8")
+    assert "Approval policy" in note_text
+    assert "Contract review" in note_text

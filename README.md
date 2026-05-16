@@ -6,15 +6,16 @@ command surface.
 
 See `docs/README.md` for development direction, features, and Mermaid flow diagrams.
 
-The current implementation covers Phase 1-4 from `plan/initial_plan.md`:
+The current implementation covers the Phase 1-4 ingest MVP plus selected search, Bases, and upload features from later phases:
 
 - rclone sync script scaffold
 - Docker/runtime scaffold
 - raw source scanner
 - JSONL manifest and ingest queue
 - source note ingest worker
-- Telegram polling commands for status, scan, queue, and ingest
-- qmd refresh/search stub interface
+- Telegram polling commands for status, scan, queue, ingest, Bases, search routing, and document upload
+- qmd CLI integration with fallback Markdown search
+- Obsidian Bases search-routing file generation
 
 Python 3.12 or newer is required. The Docker image uses Python 3.12.
 
@@ -24,6 +25,8 @@ Python 3.12 or newer is required. The Docker image uses Python 3.12.
 python3.12 -m agent.main --once status
 python3.12 -m agent.main --once scan
 python3.12 -m agent.main --once ingest
+python3.12 -m agent.main --once bases
+python3.12 -m agent.main --once route "research contract"
 ```
 
 Set these environment variables when running outside Docker:
