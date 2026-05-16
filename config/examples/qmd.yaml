@@ -1,0 +1,52 @@
+vault_root: /data/vault
+
+indexes:
+  wiki_pages:
+    include:
+      - wiki/**/*.md
+    exclude:
+      - wiki/bases/**
+      - wiki/log.md
+    metadata_fields:
+      - title
+      - type
+      - status
+      - review_state
+      - retrieval_scope
+      - source_files
+      - local_keys
+      - global_topics
+      - aliases
+      - evidence_level
+
+  raw_sources:
+    include:
+      - raw/sources/**
+    exclude:
+      - "**/*.tmp"
+      - "**/*.part"
+      - "**/*.crdownload"
+
+search_profiles:
+  local:
+    target_indexes:
+      - wiki_pages
+    prefer_folders:
+      - wiki/entities
+      - wiki/sources
+    bm25_weight: 0.55
+    vector_weight: 0.30
+    metadata_weight: 0.15
+    rerank: true
+
+  global:
+    target_indexes:
+      - wiki_pages
+    prefer_folders:
+      - wiki/topics
+      - wiki/analyses
+    bm25_weight: 0.20
+    vector_weight: 0.60
+    metadata_weight: 0.20
+    hyde: true
+    rerank: true

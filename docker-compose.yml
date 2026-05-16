@@ -1,0 +1,35 @@
+services:
+  llm-wiki-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llm-wiki-agent
+    restart: unless-stopped
+    user: "1000:1000"
+
+    env_file:
+      - /home/standard/llm-wiki-data/secrets/.env
+
+    environment:
+      TZ: Asia/Seoul
+      WIKI_ROOT: /data/vault
+      AGENT_STATE_DIR: /data/agent-state
+      CONFIG_DIR: /data/config
+      QMD_CONFIG: /data/config/qmd.yaml
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    volumes:
+      - /home/standard/llm-wiki-data/vault:/data/vault
+      - /home/standard/llm-wiki-data/agent-state:/data/agent-state
+      - /home/standard/llm-wiki-data/config:/data/config:ro
+      - /etc/localtime:/etc/localtime:ro
+
+    command: ["python", "-m", "agent.main"]
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

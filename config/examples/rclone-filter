@@ -1,0 +1,16 @@
+- .git/**
+- .obsidian/workspace.json
+- .obsidian/cache/**
+- .trash/**
+- .tmp/**
+- .agent/locks/**
+- .agent/*.sqlite-wal
+- .agent/*.sqlite-shm
+- **/.DS_Store
+- **/Thumbs.db
+- **/Desktop.ini
+- **/*.tmp
+- **/*.part
+- **/*.crdownload
+- **/~$*
++ **

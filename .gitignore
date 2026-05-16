@@ -1,2 +1,12 @@
 plan/
-
+__pycache__/
+.pytest_cache/
+.cache/
+.ruff_cache/
+.venv/
+*.pyc
+*.egg-info/
+.coverage
+htmlcov/
+.env
+llm-wiki-data/
