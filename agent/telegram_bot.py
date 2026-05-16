@@ -12,6 +12,19 @@ from agent.bases_writer import ensure_search_routing_base
 from agent.config import Settings
 from agent.ingest_worker import process_pending
 from agent.manifest import queue_counts
+from agent.evidence_retriever import format_evidence_bundle, retrieve_evidence
+from agent.patch_manager import (
+    apply_patch,
+    build_patch_message,
+    create_patch_for_update,
+    format_conflicts,
+    format_patch_list,
+    list_conflicts,
+    list_patches,
+    recent_logs,
+    reject_patch,
+)
+from agent.query_decomposer import decompose_query
 from agent.qmd_client import format_route_result, format_search_result, route, search
 from agent.raw_scanner import queue_raw_file, scan_raw_sources
 from agent.status import status_text
@@ -148,4 +161,47 @@ def dispatch_command(settings: Settings, text: str) -> str:
         if command == "/search":
             return format_route_result(route(settings, query=query))
         return format_search_result(search(settings, query=query, mode=mode))
-    return "Supported commands: /status, /scan, /queue, /ingest, /bases, /local, /global, /search, /route"
+    if command == "/update":
+        request = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+        if not request:
+            return "/update requires a request"
+        decomposition = decompose_query(request)
+        route_result = route(settings, query=request)
+        evidence = retrieve_evidence(settings, request, route_result=route_result)
+        patch = create_patch_for_update(
+            settings,
+            request,
+            route_result=route_result,
+            evidence_bundle=evidence,
+            decomposition=decomposition,
+        )
+        return build_patch_message(patch.record) + "\n\n" + format_evidence_bundle(evidence)
+    if command == "/apply":
+        patch_id = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+        if not patch_id:
+            return "/apply requires a patch_id"
+        try:
+            record = apply_patch(settings, patch_id)
+            return f"[Applied] {record.patch_id} -> {record.target_file}"
+        except Exception as exc:  # noqa: BLE001
+            return f"apply failed: {exc}"
+    if command == "/reject":
+        patch_id = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+        if not patch_id:
+            return "/reject requires a patch_id"
+        try:
+            record = reject_patch(settings, patch_id)
+            return f"[Rejected] {record.patch_id}"
+        except Exception as exc:  # noqa: BLE001
+            return f"reject failed: {exc}"
+    if command == "/patches":
+        return format_patch_list(list_patches(settings))
+    if command == "/conflicts":
+        return format_conflicts(list_conflicts(settings))
+    if command == "/logs":
+        lines = recent_logs(settings)
+        return "\n".join(lines) if lines else "[Logs]\n없음"
+    return (
+        "Supported commands: /status, /scan, /queue, /ingest, /bases, /local, /global, "
+        "/search, /route, /update, /apply, /reject, /patches, /conflicts, /logs"
+    )

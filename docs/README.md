@@ -132,6 +132,12 @@ sequenceDiagram
 | `/local <query>` | local fallback/qmd 검색 |
 | `/global <query>` | global fallback/qmd 검색 |
 | `/route <query>` | local/global 후보와 추천 anchor 반환 |
+| `/update <request>` | patch-first 업데이트 요청 생성 |
+| `/apply <patch_id>` | patch 적용 |
+| `/reject <patch_id>` | patch 거절 |
+| `/patches` | patch 목록 조회 |
+| `/conflicts` | patch 충돌 조회 |
+| `/logs` | 최근 운영 로그 조회 |
 
 Telegram document upload는 파일을 `raw/sources/`에 저장하고 `telegram_upload` source로 ingest queue에 즉시 등록한다. 같은 파일명이 이미 있으면 raw 원본을 덮어쓰지 않고 `name-2.ext` 형식으로 저장한다.
 

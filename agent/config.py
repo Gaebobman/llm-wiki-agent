@@ -59,6 +59,10 @@ class Settings:
     def locks_dir(self) -> Path:
         return self.agent_state_dir / "locks"
 
+    @property
+    def patches_dir(self) -> Path:
+        return self.agent_state_dir / "patches"
+
 
 def load_settings() -> Settings:
     wiki_root = Path(os.getenv("WIKI_ROOT", "/data/vault"))
@@ -95,6 +99,7 @@ def ensure_runtime_dirs(settings: Settings) -> None:
         settings.agent_state_dir,
         settings.logs_dir,
         settings.locks_dir,
+        settings.patches_dir,
         settings.config_dir,
     ):
         path.mkdir(parents=True, exist_ok=True)

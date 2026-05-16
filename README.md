@@ -28,6 +28,10 @@ python3.12 -m agent.main --once scan
 python3.12 -m agent.main --once ingest
 python3.12 -m agent.main --once bases
 python3.12 -m agent.main --once route "research contract"
+python3.12 -m agent.main --once update "RAG 토픽 문서에 qmd 검색 라우팅 내용 추가해줘"
+python3.12 -m agent.main --once patches
+python3.12 -m agent.main --once conflicts
+python3.12 -m agent.main --once logs
 ```
 
 Set these environment variables when running outside Docker:
