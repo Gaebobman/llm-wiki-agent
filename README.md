@@ -4,6 +4,8 @@ MVP implementation for a Jetson-hosted wiki agent that watches an Obsidian vault
 queues new raw source files, creates source notes, and exposes a small Telegram
 command surface.
 
+See `docs/README.md` for development direction, features, and Mermaid flow diagrams.
+
 The current implementation covers Phase 1-4 from `plan/initial_plan.md`:
 
 - rclone sync script scaffold
