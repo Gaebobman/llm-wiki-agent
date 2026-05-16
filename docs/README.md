@@ -94,7 +94,8 @@ flowchart TD
 - job 상태를 `processing`으로 바꾼다.
 - raw file을 읽고 `wiki/sources/{safe-stem}.md`를 생성한다.
 - 텍스트/Markdown 파일은 내용을 source note에 포함한다.
-- PDF/DOCX/PPTX/XLSX/이미지는 사용 가능한 추출기 또는 내장 parser로 텍스트를 추출한다.
+- PPTX는 `vendor/doc-xml-parser` submodule의 parser가 있으면 우선 사용해 읽기 순서, 표, 이미지, caption 관계를 반영한 Markdown으로 변환한다.
+- PDF/DOCX/XLSX/이미지는 사용 가능한 추출기 또는 내장 parser로 텍스트를 추출한다.
 - `wiki/index.md`와 `wiki/log.md`를 갱신한다.
 - manifest와 queue 상태를 `ingested`/`done`으로 바꾼다.
 - qmd refresh를 호출한다. qmd CLI가 없으면 안전하게 fallback 처리한다.

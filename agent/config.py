@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_DOC_XML_PARSER_SRC = PROJECT_ROOT / "vendor" / "doc-xml-parser" / "src"
+
+
 @dataclass(frozen=True)
 class Settings:
     wiki_root: Path
@@ -18,6 +22,8 @@ class Settings:
     qmd_timeout_seconds: int = 30
     qmd_refresh_command: str | None = None
     qmd_search_command: str | None = None
+    doc_xml_parser_src: Path | None = DEFAULT_DOC_XML_PARSER_SRC
+    extract_openxml_assets: bool = True
     scan_interval_seconds: int = 300
     ingest_interval_seconds: int = 60
 
@@ -72,6 +78,11 @@ def load_settings() -> Settings:
         qmd_timeout_seconds=int(os.getenv("QMD_TIMEOUT_SECONDS", "30")),
         qmd_refresh_command=os.getenv("QMD_REFRESH_COMMAND") or None,
         qmd_search_command=os.getenv("QMD_SEARCH_COMMAND") or None,
+        doc_xml_parser_src=_optional_path(
+            os.getenv("DOC_XML_PARSER_SRC", str(DEFAULT_DOC_XML_PARSER_SRC))
+        ),
+        extract_openxml_assets=os.getenv("EXTRACT_OPENXML_ASSETS", "true").lower()
+        in {"1", "true", "yes", "on"},
         scan_interval_seconds=int(os.getenv("SCAN_INTERVAL_SECONDS", "300")),
         ingest_interval_seconds=int(os.getenv("INGEST_INTERVAL_SECONDS", "60")),
     )
@@ -96,3 +107,9 @@ def _parse_allowed_user_ids(value: str) -> set[int]:
             continue
         user_ids.add(int(item))
     return user_ids
+
+
+def _optional_path(value: str | None) -> Path | None:
+    if not value:
+        return None
+    return Path(value)

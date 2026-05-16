@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import zipfile
+from pathlib import Path
 
 from agent.config import Settings
 from agent.ingest_worker import process_pending
@@ -68,3 +69,23 @@ def test_ingest_extracts_docx_text(tmp_path):
     note_text = source_note.read_text(encoding="utf-8")
     assert "Approval policy" in note_text
     assert "Contract review" in note_text
+
+
+def test_ingest_uses_doc_xml_parser_for_pptx(tmp_path):
+    sample = Path("vendor/doc-xml-parser/public_samples/openxml_parser_public_sample.pptx")
+    if not sample.exists():
+        raise AssertionError(f"missing integration fixture: {sample}")
+    settings = make_settings(tmp_path)
+    settings.raw_sources_dir.mkdir(parents=True)
+    target = settings.raw_sources_dir / "openxml_parser_public_sample.pptx"
+    target.write_bytes(sample.read_bytes())
+    scan_raw_sources(settings)
+
+    result = process_pending(settings, limit=None)
+
+    assert result.processed == 1
+    source_note = settings.wiki_sources_dir / "openxml_parser_public_sample.md"
+    note_text = source_note.read_text(encoding="utf-8")
+    assert "<!-- Page 1 -->" in note_text
+    assert "![E_" in note_text or "<table>" in note_text
+    assert any((settings.wiki_sources_dir / "openxml_parser_public_sample").iterdir())

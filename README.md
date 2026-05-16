@@ -16,6 +16,7 @@ The current implementation covers the Phase 1-4 ingest MVP plus selected search,
 - Telegram polling commands for status, scan, queue, ingest, Bases, search routing, and document upload
 - qmd CLI integration with fallback Markdown search
 - Obsidian Bases search-routing file generation
+- PPTX ingest via `vendor/doc-xml-parser` core parser when available
 
 Python 3.12 or newer is required. The Docker image uses Python 3.12.
 
@@ -35,4 +36,24 @@ Set these environment variables when running outside Docker:
 export WIKI_ROOT=/home/standard/llm-wiki-data/vault
 export AGENT_STATE_DIR=/home/standard/llm-wiki-data/agent-state
 export CONFIG_DIR=/home/standard/llm-wiki-data/config
+export DOC_XML_PARSER_SRC=/home/standard/0_Code/llm-wiki-agent/vendor/doc-xml-parser/src
 ```
+
+## Submodules
+
+This repository uses `vendor/doc-xml-parser` as a Git submodule.
+
+Clone with:
+
+```bash
+git clone --recurse-submodules https://github.com/Gaebobman/llm-wiki-agent.git
+```
+
+For an existing clone:
+
+```bash
+git submodule update --init --recursive
+```
+
+Docker copies `vendor/doc-xml-parser` into the image and sets
+`DOC_XML_PARSER_SRC=/app/vendor/doc-xml-parser/src`.

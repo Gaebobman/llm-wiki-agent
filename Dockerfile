@@ -22,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY pyproject.toml README.md /app/
 COPY agent /app/agent
 COPY scripts /app/scripts
+COPY vendor /app/vendor
 
 RUN pip install --upgrade pip && \
     pip install uv && \

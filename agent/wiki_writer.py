@@ -8,6 +8,7 @@ from xml.etree import ElementTree
 
 from agent.config import Settings
 from agent.file_utils import is_probably_text, relative_to_root, safe_stem
+from agent.openxml_parser import parse_openxml
 from agent.timeutils import today
 
 
@@ -18,7 +19,7 @@ def source_note_path(settings: Settings, raw_rel_path: str) -> Path:
 def build_source_note(settings: Settings, raw_rel_path: str, sha256: str, ingest_source: str) -> str:
     raw_path = settings.wiki_root / raw_rel_path
     title = Path(raw_rel_path).stem.replace("-", " ").replace("_", " ").strip() or Path(raw_rel_path).name
-    content = _extract_body(raw_path)
+    content = _extract_body(settings, raw_path)
     date = today()
     return "\n".join(
         [
@@ -102,10 +103,10 @@ def append_log_entry(settings: Settings, raw_rel_path: str, note_path: Path, sha
     settings.wiki_log_path.write_text(existing.rstrip() + "\n\n" + entry + "\n", encoding="utf-8")
 
 
-def _extract_body(raw_path: Path) -> str:
+def _extract_body(settings: Settings, raw_path: Path) -> str:
     if not raw_path.exists():
         return "_Raw source file is missing at ingest time._"
-    extracted = _extract_structured_document(raw_path)
+    extracted = _extract_structured_document(raw_path, settings=settings)
     if extracted is not None:
         return extracted
     if not is_probably_text(raw_path):
@@ -123,8 +124,12 @@ def _extract_body(raw_path: Path) -> str:
     return f"```{suffix}\n{text.rstrip()}\n```"
 
 
-def _extract_structured_document(raw_path: Path) -> str | None:
+def _extract_structured_document(raw_path: Path, settings: Settings | None = None) -> str | None:
     suffix = raw_path.suffix.lower()
+    if suffix == ".pptx" and settings is not None:
+        result = parse_openxml(settings, raw_path)
+        if result.ok and result.markdown:
+            return result.markdown
     if suffix == ".pdf":
         return _extract_pdf(raw_path)
     if suffix == ".docx":

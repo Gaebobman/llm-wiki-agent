@@ -1,0 +1,3 @@
+[submodule "vendor/doc-xml-parser"]
+	path = vendor/doc-xml-parser
+	url = https://github.com/Gaebobman/openxml-parser
