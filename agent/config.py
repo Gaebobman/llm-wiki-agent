@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DOC_XML_PARSER_SRC = PROJECT_ROOT / "vendor" / "doc-xml-parser" / "src"
+DEFAULT_OPENXML_PARSER_SRC = PROJECT_ROOT / "vendor" / "openxml-parser" / "src"
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,12 @@ class Settings:
     qmd_timeout_seconds: int = 30
     qmd_refresh_command: str | None = None
     qmd_search_command: str | None = None
-    doc_xml_parser_src: Path | None = DEFAULT_DOC_XML_PARSER_SRC
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
+    llm_planner_command: str | None = None
+    llm_planner_timeout_seconds: int = 30
+    openxml_parser_src: Path | None = DEFAULT_OPENXML_PARSER_SRC
     extract_openxml_assets: bool = True
     scan_interval_seconds: int = 300
     ingest_interval_seconds: int = 60
@@ -82,9 +87,12 @@ def load_settings() -> Settings:
         qmd_timeout_seconds=int(os.getenv("QMD_TIMEOUT_SECONDS", "30")),
         qmd_refresh_command=os.getenv("QMD_REFRESH_COMMAND") or None,
         qmd_search_command=os.getenv("QMD_SEARCH_COMMAND") or None,
-        doc_xml_parser_src=_optional_path(
-            os.getenv("DOC_XML_PARSER_SRC", str(DEFAULT_DOC_XML_PARSER_SRC))
-        ),
+        llm_api_key=os.getenv("OPENAI_API_KEY") or None,
+        llm_base_url=os.getenv("OPENAI_BASE_URL") or None,
+        llm_model=os.getenv("LLM_MODEL") or None,
+        llm_planner_command=os.getenv("LLM_PLANNER_COMMAND") or None,
+        llm_planner_timeout_seconds=int(os.getenv("LLM_PLANNER_TIMEOUT_SECONDS", "30")),
+        openxml_parser_src=_optional_path(os.getenv("OPENXML_PARSER_SRC", str(DEFAULT_OPENXML_PARSER_SRC))),
         extract_openxml_assets=os.getenv("EXTRACT_OPENXML_ASSETS", "true").lower()
         in {"1", "true", "yes", "on"},
         scan_interval_seconds=int(os.getenv("SCAN_INTERVAL_SECONDS", "300")),

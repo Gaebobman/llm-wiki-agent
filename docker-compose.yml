@@ -16,7 +16,7 @@ services:
       AGENT_STATE_DIR: /data/agent-state
       CONFIG_DIR: /data/config
       QMD_CONFIG: /data/config/qmd.yaml
-      DOC_XML_PARSER_SRC: /app/vendor/doc-xml-parser/src
+      OPENXML_PARSER_SRC: /app/vendor/openxml-parser/src
 
     extra_hosts:
       - "host.docker.internal:host-gateway"

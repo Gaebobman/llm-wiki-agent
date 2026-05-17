@@ -9,6 +9,12 @@ from pathlib import Path
 
 from agent.config import Settings
 from agent.evidence_retriever import EvidenceBundle, retrieve_evidence
+from agent.policies import (
+    ensure_wiki_markdown_target,
+    evaluate_update_policy,
+    requires_second_approval,
+    validate_patch_record_schema,
+)
 from agent.query_decomposer import QueryDecomposition, decompose_query
 from agent.timeutils import now_iso
 from agent.wiki_updater import append_index_if_needed, append_log, build_update_document, write_document
@@ -53,10 +59,22 @@ def create_patch_for_update(
     evidence_bundle: EvidenceBundle | None = None,
     decomposition: QueryDecomposition | None = None,
 ) -> PatchBuildResult:
-    decomposition = decomposition or decompose_query(request_text)
+    decomposition = decomposition or decompose_query(
+        request_text,
+        command_context="update",
+        planner_command=settings.llm_planner_command,
+        llm_base_url=settings.llm_base_url,
+        llm_model=settings.llm_model,
+        llm_api_key=settings.llm_api_key,
+        planner_timeout_seconds=settings.llm_planner_timeout_seconds,
+    )
     route_result = route_result or {}
     evidence_bundle = evidence_bundle or retrieve_evidence(settings, request_text, route_result=route_result)
     target_path = _pick_target_path(settings, decomposition, route_result, evidence_bundle)
+    target_path = ensure_wiki_markdown_target(settings, target_path)
+    policy = evaluate_update_policy(settings, request_text, decomposition, target_path)
+    if not policy.allowed:
+        raise ValueError("; ".join(policy.reasons) or "policy denied update")
     before_text = _read_text(target_path) if target_path.exists() else ""
     after_text = build_update_document(
         settings,
@@ -91,8 +109,8 @@ def create_patch_for_update(
         base_sha256=_sha256(before_text),
         new_sha256=_sha256(after_text),
         status="pending",
-        approval_required=decomposition.requires_approval,
-        risk_level=_risk_level(decomposition),
+        approval_required=policy.approval_required,
+        risk_level=policy.risk_level,
         created_at=now_iso(),
         updated_at=now_iso(),
         query=decomposition.user_query,
@@ -110,12 +128,18 @@ def create_patch_for_update(
 
 def apply_patch(settings: Settings, patch_id: str) -> PatchRecord:
     record = load_patch(settings, patch_id)
-    if record.status != "pending":
+    if requires_second_approval(record.risk_level) and record.status != "approved":
+        raise ValueError(f"high-risk patch requires /approve before apply: {patch_id}")
+    if not requires_second_approval(record.risk_level) and record.status != "pending":
         raise ValueError(f"patch is not pending: {patch_id}")
+    if record.status not in {"pending", "approved"}:
+        raise ValueError(f"patch is not applicable: {patch_id}")
     patch_dir = patches_dir(settings) / patch_id
     after_path = patch_dir / "after.md"
     target_path = settings.wiki_root / record.target_file
+    target_path = ensure_wiki_markdown_target(settings, target_path)
     content = after_path.read_text(encoding="utf-8")
+    _validate_patch_files(record, patch_dir, content)
     current = _read_text(target_path) if target_path.exists() else ""
     if _sha256(current) != record.base_sha256:
         raise ValueError(f"patch base mismatch for {patch_id}")
@@ -127,9 +151,20 @@ def apply_patch(settings: Settings, patch_id: str) -> PatchRecord:
     return updated
 
 
+def approve_patch(settings: Settings, patch_id: str) -> PatchRecord:
+    record = load_patch(settings, patch_id)
+    if record.status != "pending":
+        raise ValueError(f"patch is not pending: {patch_id}")
+    if not requires_second_approval(record.risk_level):
+        raise ValueError(f"patch does not require second approval: {patch_id}")
+    updated = _replace_record_status(settings, patch_id, "approved")
+    _append_patch_log(settings, f"approved {patch_id} target={record.target_file}")
+    return updated
+
+
 def reject_patch(settings: Settings, patch_id: str) -> PatchRecord:
     record = load_patch(settings, patch_id)
-    if record.status not in {"pending", "applied"}:
+    if record.status not in {"pending", "approved", "applied"}:
         raise ValueError(f"patch is not rejectable: {patch_id}")
     updated = _replace_record_status(settings, patch_id, "rejected")
     _append_patch_log(settings, f"rejected {patch_id} target={record.target_file}")
@@ -139,7 +174,9 @@ def reject_patch(settings: Settings, patch_id: str) -> PatchRecord:
 def load_patch(settings: Settings, patch_id: str) -> PatchRecord:
     meta_path = patches_dir(settings) / patch_id / "metadata.json"
     data = json.loads(meta_path.read_text(encoding="utf-8"))
-    return PatchRecord(**data)
+    record = PatchRecord(**data)
+    validate_patch_record_schema(record)
+    return record
 
 
 def list_patches(settings: Settings, status: str | None = None) -> list[PatchRecord]:
@@ -158,7 +195,7 @@ def list_patches(settings: Settings, status: str | None = None) -> list[PatchRec
 
 def list_conflicts(settings: Settings) -> list[PatchRecord]:
     conflicts: list[PatchRecord] = []
-    for record in list_patches(settings, status="pending"):
+    for record in [item for item in list_patches(settings) if item.status in {"pending", "approved"}]:
         target_path = settings.wiki_root / record.target_file
         current = _read_text(target_path) if target_path.exists() else ""
         if _sha256(current) != record.base_sha256:
@@ -191,11 +228,17 @@ def build_patch_message(record: PatchRecord) -> str:
         f"- {record.summary or record.request_text}",
         "",
         "적용하려면:",
-        f"/apply {record.patch_id}",
-        "",
-        "거절하려면:",
-        f"/reject {record.patch_id}",
     ]
+    if requires_second_approval(record.risk_level):
+        lines.append(f"/approve {record.patch_id}")
+    lines.extend(
+        [
+            f"/apply {record.patch_id}",
+            "",
+            "거절하려면:",
+            f"/reject {record.patch_id}",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -222,9 +265,26 @@ def format_conflicts(conflicts: list[PatchRecord]) -> str:
 def _replace_record_status(settings: Settings, patch_id: str, status: str) -> PatchRecord:
     record = load_patch(settings, patch_id)
     updated = PatchRecord(**{**asdict(record), "status": status, "updated_at": now_iso()})
+    validate_patch_record_schema(updated)
     meta_path = patches_dir(settings) / patch_id / "metadata.json"
     meta_path.write_text(json.dumps(asdict(updated), ensure_ascii=False, indent=2), encoding="utf-8")
     return updated
+
+
+def _validate_patch_files(record: PatchRecord, patch_dir: Path, after_text: str) -> None:
+    before_path = Path(record.before_path)
+    after_path = Path(record.after_path)
+    diff_path = Path(record.diff_path)
+    for path in (before_path, after_path, diff_path):
+        if not _is_relative_to(path.resolve(), patch_dir.resolve()):
+            raise ValueError(f"patch file path escapes patch directory: {path}")
+        if not path.exists() or not path.is_file():
+            raise ValueError(f"missing patch file: {path}")
+    before_text = before_path.read_text(encoding="utf-8")
+    if _sha256(before_text) != record.base_sha256:
+        raise ValueError(f"patch before hash mismatch: {record.patch_id}")
+    if _sha256(after_text) != record.new_sha256:
+        raise ValueError(f"patch after hash mismatch: {record.patch_id}")
 
 
 def _pick_target_path(
@@ -242,14 +302,6 @@ def _pick_target_path(
             return settings.wiki_root / item.path
     slug = _slugify(decomposition.user_query)
     return settings.wiki_root / "wiki" / "topics" / f"{slug}.md"
-
-
-def _risk_level(decomposition: QueryDecomposition) -> str:
-    if decomposition.requires_approval:
-        return "high"
-    if decomposition.requires_update:
-        return "medium"
-    return "low"
 
 
 def _new_patch_id(request_text: str) -> str:
@@ -287,3 +339,11 @@ def _append_patch_log(settings: Settings, message: str) -> None:
     line = f"{now_iso()} {message}"
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(line + "\n")
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False

@@ -71,8 +71,8 @@ def test_ingest_extracts_docx_text(tmp_path):
     assert "Contract review" in note_text
 
 
-def test_ingest_uses_doc_xml_parser_for_pptx(tmp_path):
-    sample = Path("vendor/doc-xml-parser/public_samples/openxml_parser_public_sample.pptx")
+def test_ingest_uses_openxml_parser_for_pptx(tmp_path):
+    sample = Path("vendor/openxml-parser/public_samples/openxml_parser_public_sample.pptx")
     if not sample.exists():
         raise AssertionError(f"missing integration fixture: {sample}")
     settings = make_settings(tmp_path)

@@ -19,9 +19,9 @@ class OpenXmlParseResult:
 def parse_openxml(settings: Settings, raw_path: Path) -> OpenXmlParseResult:
     if raw_path.suffix.lower() != ".pptx":
         return OpenXmlParseResult(ok=False, error="unsupported openxml type")
-    parser_src = settings.doc_xml_parser_src
+    parser_src = settings.openxml_parser_src
     if parser_src is None or not parser_src.exists():
-        return OpenXmlParseResult(ok=False, error=f"doc-xml-parser src not found: {parser_src}")
+        return OpenXmlParseResult(ok=False, error=f"openxml-parser src not found: {parser_src}")
     _ensure_parser_path(parser_src)
     try:
         from document_inteligence.application.config import ParserConfig
@@ -31,7 +31,7 @@ def parse_openxml(settings: Settings, raw_path: Path) -> OpenXmlParseResult:
             NoopCaptionVerifier,
         )
     except Exception as exc:  # noqa: BLE001 - optional integration must fall back.
-        return OpenXmlParseResult(ok=False, error=f"doc-xml-parser import failed: {exc}")
+        return OpenXmlParseResult(ok=False, error=f"openxml-parser import failed: {exc}")
 
     try:
         config = ParserConfig()
@@ -50,10 +50,10 @@ def parse_openxml(settings: Settings, raw_path: Path) -> OpenXmlParseResult:
         parsed = use_case.execute(str(raw_path))
         markdown = use_case.to_markdown(parsed).strip()
         if not markdown:
-            return OpenXmlParseResult(ok=False, parser="doc-xml-parser", error="empty markdown")
-        return OpenXmlParseResult(ok=True, markdown=markdown, parser="doc-xml-parser")
+            return OpenXmlParseResult(ok=False, parser="openxml-parser", error="empty markdown")
+        return OpenXmlParseResult(ok=True, markdown=markdown, parser="openxml-parser")
     except Exception as exc:  # noqa: BLE001 - ingest should fall back to simple parser.
-        return OpenXmlParseResult(ok=False, parser="doc-xml-parser", error=str(exc))
+        return OpenXmlParseResult(ok=False, parser="openxml-parser", error=str(exc))
 
 
 def _ensure_parser_path(parser_src: Path) -> None:

@@ -94,7 +94,7 @@ flowchart TD
 - job 상태를 `processing`으로 바꾼다.
 - raw file을 읽고 `wiki/sources/{safe-stem}.md`를 생성한다.
 - 텍스트/Markdown 파일은 내용을 source note에 포함한다.
-- PPTX는 `vendor/doc-xml-parser` submodule의 parser가 있으면 우선 사용해 읽기 순서, 표, 이미지, caption 관계를 반영한 Markdown으로 변환한다.
+- PPTX는 `vendor/openxml-parser` submodule의 parser가 있으면 우선 사용해 읽기 순서, 표, 이미지, caption 관계를 반영한 Markdown으로 변환한다.
 - PDF/DOCX/XLSX/이미지는 사용 가능한 추출기 또는 내장 parser로 텍스트를 추출한다.
 - `wiki/index.md`와 `wiki/log.md`를 갱신한다.
 - manifest와 queue 상태를 `ingested`/`done`으로 바꾼다.
@@ -128,6 +128,34 @@ sequenceDiagram
 | `/scan` | raw scanner를 1회 실행 |
 | `/queue` | queue 상태별 job 개수를 반환 |
 | `/ingest` | pending ingest job을 처리 |
+| `/update <request>` | 근거를 수집하고 승인 대기 patch를 생성 |
+| `/approve <patch_id>` | high-risk patch의 2차 승인을 기록 |
+| `/apply <patch_id>` | pending patch를 실제 wiki Markdown에 적용 |
+| `/reject <patch_id>` | patch를 거절 상태로 변경 |
+| `/patches` | patch 목록을 반환 |
+| `/conflicts` | base hash가 달라진 patch를 반환 |
+| `/logs` | 최근 운영 로그를 반환 |
+
+### Safety Harness
+
+CRUD 요청은 직접 파일을 수정하지 않는다. `query_decomposer`는
+`OPENAI_BASE_URL`과 `LLM_MODEL`이 있으면 OpenAI-compatible chat endpoint를
+사용해 요청을 의미 기반으로 분류한다. `LLM_PLANNER_COMMAND`가 있으면 이 경로가
+우선이며, 사용자 요청과 command context를 JSON으로 전달해 LLM planner의 schema
+응답을 받는다. planner는 `crud_action`, `destructive_action`, `risk_level`,
+`local_query`, `global_query`, `rationale`을 반환한다. planner가 없으면 언어별
+키워드가 아니라 `/update` 같은 command context만 사용해 보수적으로 fallback한다.
+
+`evidence_retriever`가 관련 note를 수집한 뒤,
+`patch_manager`가 `agent-state/patches/{patch_id}` 아래에 `before.md`,
+`after.md`, `diff.patch`, `metadata.json`을 생성한다.
+
+`agent.policies`는 patch 대상이 `WIKI_ROOT/wiki/**/*.md` 안에 있는지 검증하고,
+raw 파일 또는 wiki root 외부 경로를 차단한다. `/apply` 시점에는 현재 파일의
+SHA256이 patch 생성 당시 `base_sha256`과 같은지도 확인해 stale patch 적용을
+막는다. planner가 `risk_level=high` 또는 `destructive_action=true`로 판단한
+요청은 `/approve` 없이는 `/apply`할 수 없다. Patch metadata와
+`before.md`/`after.md` hash도 apply 전에 검증한다.
 | `/bases` | `wiki/bases/search-routing.base`를 생성 |
 | `/local <query>` | local fallback/qmd 검색 |
 | `/global <query>` | global fallback/qmd 검색 |

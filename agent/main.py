@@ -11,6 +11,7 @@ from agent.manifest import queue_counts
 from agent.evidence_retriever import format_evidence_bundle, retrieve_evidence
 from agent.patch_manager import (
     apply_patch,
+    approve_patch,
     build_patch_message,
     create_patch_for_update,
     format_conflicts,
@@ -41,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
             "global",
             "route",
             "update",
+            "apply",
+            "approve",
+            "reject",
             "patches",
             "conflicts",
             "logs",
@@ -96,7 +100,15 @@ def main(argv: list[str] | None = None) -> int:
         if not request:
             print("--once update requires a request", file=sys.stderr)
             return 2
-        decomposition = decompose_query(request)
+        decomposition = decompose_query(
+            request,
+            command_context="update",
+            planner_command=settings.llm_planner_command,
+            llm_base_url=settings.llm_base_url,
+            llm_model=settings.llm_model,
+            llm_api_key=settings.llm_api_key,
+            planner_timeout_seconds=settings.llm_planner_timeout_seconds,
+        )
         route_result = route(settings, query=request)
         evidence = retrieve_evidence(settings, request, route_result=route_result)
         patch = create_patch_for_update(
@@ -109,6 +121,30 @@ def main(argv: list[str] | None = None) -> int:
         print(build_patch_message(patch.record))
         print()
         print(format_evidence_bundle(evidence))
+        return 0
+    if args.once == "apply":
+        patch_id = " ".join(args.query).strip()
+        if not patch_id:
+            print("--once apply requires a patch_id", file=sys.stderr)
+            return 2
+        record = apply_patch(settings, patch_id)
+        print(f"applied: {record.patch_id} -> {record.target_file}")
+        return 0
+    if args.once == "approve":
+        patch_id = " ".join(args.query).strip()
+        if not patch_id:
+            print("--once approve requires a patch_id", file=sys.stderr)
+            return 2
+        record = approve_patch(settings, patch_id)
+        print(f"approved: {record.patch_id}")
+        return 0
+    if args.once == "reject":
+        patch_id = " ".join(args.query).strip()
+        if not patch_id:
+            print("--once reject requires a patch_id", file=sys.stderr)
+            return 2
+        record = reject_patch(settings, patch_id)
+        print(f"rejected: {record.patch_id}")
         return 0
     if args.once == "patches":
         print(format_patch_list(list_patches(settings)))

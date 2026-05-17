@@ -15,6 +15,7 @@ from agent.manifest import queue_counts
 from agent.evidence_retriever import format_evidence_bundle, retrieve_evidence
 from agent.patch_manager import (
     apply_patch,
+    approve_patch,
     build_patch_message,
     create_patch_for_update,
     format_conflicts,
@@ -24,6 +25,7 @@ from agent.patch_manager import (
     recent_logs,
     reject_patch,
 )
+from agent.policies import evaluate_command_policy
 from agent.query_decomposer import decompose_query
 from agent.qmd_client import format_route_result, format_search_result, route, search
 from agent.raw_scanner import queue_raw_file, scan_raw_sources
@@ -67,13 +69,13 @@ class TelegramBot:
         document = message.get("document")
         if chat_id is None or (not text and not document):
             return
-        if self.settings.telegram_allowed_user_ids and user_id not in self.settings.telegram_allowed_user_ids:
-            self.send_message(chat_id, "Unauthorized user.")
-            return
         if document:
+            if self.settings.telegram_allowed_user_ids and user_id not in self.settings.telegram_allowed_user_ids:
+                self.send_message(chat_id, "Unauthorized user.")
+                return
             self.send_message(chat_id, self.handle_document_upload(document))
             return
-        self.send_message(chat_id, dispatch_command(self.settings, text))
+        self.send_message(chat_id, dispatch_command(self.settings, text, user_id=user_id))
 
     def send_message(self, chat_id: int, text: str) -> None:
         self._request("sendMessage", {"chat_id": chat_id, "text": text})
@@ -132,8 +134,11 @@ def unique_raw_upload_path(settings: Settings, file_name: str):
         counter += 1
 
 
-def dispatch_command(settings: Settings, text: str) -> str:
+def dispatch_command(settings: Settings, text: str, user_id: int | None = None) -> str:
     command = text.split(maxsplit=1)[0].lower()
+    decision = evaluate_command_policy(settings, command, user_id=user_id)
+    if not decision.allowed:
+        return "Unauthorized command." if "unauthorized user" in decision.reasons else "Unsupported command."
     if command == "/status":
         return status_text(settings)
     if command == "/scan":
@@ -165,7 +170,15 @@ def dispatch_command(settings: Settings, text: str) -> str:
         request = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
         if not request:
             return "/update requires a request"
-        decomposition = decompose_query(request)
+        decomposition = decompose_query(
+            request,
+            command_context="update",
+            planner_command=settings.llm_planner_command,
+            llm_base_url=settings.llm_base_url,
+            llm_model=settings.llm_model,
+            llm_api_key=settings.llm_api_key,
+            planner_timeout_seconds=settings.llm_planner_timeout_seconds,
+        )
         route_result = route(settings, query=request)
         evidence = retrieve_evidence(settings, request, route_result=route_result)
         patch = create_patch_for_update(
@@ -185,6 +198,15 @@ def dispatch_command(settings: Settings, text: str) -> str:
             return f"[Applied] {record.patch_id} -> {record.target_file}"
         except Exception as exc:  # noqa: BLE001
             return f"apply failed: {exc}"
+    if command == "/approve":
+        patch_id = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+        if not patch_id:
+            return "/approve requires a patch_id"
+        try:
+            record = approve_patch(settings, patch_id)
+            return f"[Approved] {record.patch_id}"
+        except Exception as exc:  # noqa: BLE001
+            return f"approve failed: {exc}"
     if command == "/reject":
         patch_id = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
         if not patch_id:
@@ -203,5 +225,5 @@ def dispatch_command(settings: Settings, text: str) -> str:
         return "\n".join(lines) if lines else "[Logs]\n없음"
     return (
         "Supported commands: /status, /scan, /queue, /ingest, /bases, /local, /global, "
-        "/search, /route, /update, /apply, /reject, /patches, /conflicts, /logs"
+        "/search, /route, /update, /approve, /apply, /reject, /patches, /conflicts, /logs"
     )
