@@ -21,32 +21,201 @@ The current implementation covers the Phase 1-4 ingest MVP plus selected search,
 
 Python 3.12 or newer is required. The Docker image uses Python 3.12.
 
-## Local smoke commands
+## User Manual
+
+### 1. Update The Project
+
+Update the checkout and submodule:
 
 ```bash
-python3.12 -m agent.main --once status
-python3.12 -m agent.main --once scan
-python3.12 -m agent.main --once ingest
-python3.12 -m agent.main --once bases
-python3.12 -m agent.main --once route "research contract"
-python3.12 -m agent.main --once update "RAG 토픽 문서에 qmd 검색 라우팅 내용 추가해줘"
-python3.12 -m agent.main --once approve "patch_id"
-python3.12 -m agent.main --once apply "patch_id"
-python3.12 -m agent.main --once patches
-python3.12 -m agent.main --once conflicts
-python3.12 -m agent.main --once logs
+cd /home/standard/0_Code/llm-wiki-agent
+git pull
+git submodule update --init --recursive
 ```
 
-Set these environment variables when running outside Docker:
+### 2. Prepare Runtime Directories
+
+Create the runtime directories used by the agent:
+
+```bash
+mkdir -p /home/standard/llm-wiki-data/vault/raw/sources
+mkdir -p /home/standard/llm-wiki-data/agent-state
+mkdir -p /home/standard/llm-wiki-data/config
+```
+
+Use these minimum environment variables for local CLI testing:
 
 ```bash
 export WIKI_ROOT=/home/standard/llm-wiki-data/vault
 export AGENT_STATE_DIR=/home/standard/llm-wiki-data/agent-state
 export CONFIG_DIR=/home/standard/llm-wiki-data/config
 export OPENXML_PARSER_SRC=/home/standard/0_Code/llm-wiki-agent/vendor/openxml-parser/src
-# Optional: use OPENAI_BASE_URL + LLM_MODEL directly, or provide a command that
-# reads planner JSON from stdin and returns planner JSON on stdout.
-export LLM_PLANNER_COMMAND=/home/standard/llm-wiki-data/config/planner-wrapper.sh
+```
+
+Configure an OpenAI-compatible LLM endpoint for semantic planning:
+
+```bash
+export OPENAI_BASE_URL=http://host.docker.internal:8000/v1
+export OPENAI_API_KEY=sk-dummy
+export LLM_MODEL=qwen3.5-27b
+export LLM_PLANNER_TIMEOUT_SECONDS=30
+```
+
+Configure Telegram if you want to operate the agent through chat:
+
+```bash
+export TELEGRAM_BOT_TOKEN=123456:xxxx
+export TELEGRAM_ALLOWED_USER_IDS=123456789
+```
+
+### 3. Run The Agent Locally
+
+Check the current agent status:
+
+```bash
+python3.12 -m agent.main --once status
+```
+
+Start the normal polling loop:
+
+```bash
+python3.12 -m agent.main
+```
+
+If `TELEGRAM_BOT_TOKEN` is configured, this starts Telegram polling. If not, the
+agent runs the scanner/ingest loop.
+
+### 4. Add Source Documents
+
+Put files under `raw/sources`:
+
+```bash
+cp README.md /home/standard/llm-wiki-data/vault/raw/sources/readme-test.md
+```
+
+Then scan and ingest:
+
+```bash
+python -m agent.main --once scan
+python -m agent.main --once queue
+python -m agent.main --once ingest
+```
+
+Generated source notes are written to:
+
+```text
+/home/standard/llm-wiki-data/vault/wiki/sources
+```
+
+The wiki index and log are updated at:
+
+```text
+/home/standard/llm-wiki-data/vault/wiki/index.md
+/home/standard/llm-wiki-data/vault/wiki/log.md
+```
+
+PPTX files use `vendor/openxml-parser` when available:
+
+```bash
+cp vendor/openxml-parser/public_samples/openxml_parser_public_sample.pptx \
+  /home/standard/llm-wiki-data/vault/raw/sources/
+python -m agent.main --once scan
+python -m agent.main --once ingest
+```
+
+### 5. Search And Route
+
+```bash
+python -m agent.main --once local "research contract"
+python -m agent.main --once global "research contract"
+python -m agent.main --once route "research contract"
+```
+
+### 6. Update Wiki Notes
+
+Update requests are patch-first. The agent creates a patch under
+`agent-state/patches/{patch_id}` and waits for approval before changing wiki
+Markdown.
+
+```bash
+python -m agent.main --once update "openxml parser 문서에 PPTX 이미지 추출 정책을 보강해줘"
+python -m agent.main --once patches
+```
+
+Apply a normal patch:
+
+```bash
+python -m agent.main --once apply PATCH_ID
+```
+
+High-risk patches require a second approval step:
+
+```bash
+python -m agent.main --once approve PATCH_ID
+python -m agent.main --once apply PATCH_ID
+```
+
+Reject a patch:
+
+```bash
+python -m agent.main --once reject PATCH_ID
+```
+
+Inspect conflicts and logs:
+
+```bash
+python -m agent.main --once conflicts
+python -m agent.main --once logs
+```
+
+### 7. Run With Docker
+
+```bash
+docker compose build
+docker compose up -d
+docker compose logs -f llm-wiki-agent
+```
+
+One-shot Docker commands are useful for checks:
+
+```bash
+docker compose run --rm llm-wiki-agent python -m agent.main --once status
+```
+
+### 8. Telegram Commands
+
+Available Telegram commands:
+
+```text
+/status
+/scan
+/queue
+/ingest
+/bases
+/local <query>
+/global <query>
+/search <query>
+/route <query>
+/update <request>
+/approve <patch_id>
+/apply <patch_id>
+/reject <patch_id>
+/patches
+/conflicts
+/logs
+```
+
+You can also upload a document to the Telegram bot. The agent stores it under
+`raw/sources`, queues it, and keeps the raw source immutable.
+
+### 9. Health Check
+
+For local validation:
+
+```bash
+source .venv/bin/activate
+python -m pytest
+docker compose run --rm llm-wiki-agent python -m agent.main --once status
 ```
 
 ## Submodules
